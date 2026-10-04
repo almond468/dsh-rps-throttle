@@ -1,0 +1,62 @@
+# dsh-rps-throttle bundle patch: inserts the host plugin row into the profile
+# roster (the `dsh.bundle.patch` manifest field). The node half (exports ".")
+# runs in the host process and wraps globalThis.fetch so every request to the
+# matched hosts is paced per (host, model). No browser half.
+#
+# Values from empirical tests (2026-10-04, see lib/index.js top comment):
+#   - Quota buckets are per (key, model), not key-wide: glm-5.2 and
+#     deepseek-v4-flash each get ~5 passes/min independently; flash-lite 14/14.
+#   - glm-5.2 / deepseek-v4-flash ~5 req/min; 1 req/s burst hits wall at 6th.
+#   - sensenova-6.8-flash-lite >= 30 req/min (12/24s, 14/14s all pass),
+#     plus ~5 req/s rate wall -> rps=4 for margin.
+#   - deepseek-v4-pro / deepseek-flash report RateLimitExceeded.Endpoint*Exceeded
+#     — shared endpoint saturation, client throttling can't fix, only reduce + backoff.
+#   - kimi-k3 only accepts temperature=1; sensenova-u1-fast/u1.5-lite/deepseek-v4.1-flash
+#     unavailable on this token plan (model not found / not available in plan).
+- insert:
+    - id: rps-throttle
+      name: dsh-rps-throttle
+      config:
+        enabled: true
+        hosts:
+          - token.sensenova.cn
+          - api.sensenova.cn
+        # Fallback limits (models not listed in modelLimits use "*")
+        rps: 4
+        rpm: 0
+        maxInFlight: 4
+        tpm: 0
+        maxInlineRetries: 2
+        quotaCooldownMs: 20000
+        logIntervalMs: 30000        # Periodic stats log; 0 = disabled
+        # When host main-process logs are unreadable, set a path to self-verify
+        # "plugin actually loaded": writes ev=load on startup (with pid to detect
+        # multi-process), then ev=tick every heartbeatEveryMs.
+        heartbeatFile: ""
+        heartbeatEveryMs: 600000
+        modelLimits:
+          # Primary: widest quota, only ~5 rps rate wall
+          sensenova-6.8-flash-lite:
+            rps: 4
+            rpm: 24
+          # ~5 req/min: leave 1 margin, queue via sliding window instead of hitting wall
+          glm-5.2:
+            rps: 1
+            rpm: 5
+          deepseek-v4-flash:
+            rps: 1
+            rpm: 5
+          kimi-k3:
+            rps: 1
+            rpm: 5
+          # Shared endpoints often oversold: queue slowly rather than burn retry budget on 429s
+          deepseek-v4-pro:
+            rps: 0.5
+            rpm: 4
+          deepseek-flash:
+            rps: 0.5
+            rpm: 4
+          # Un-tested models: most conservative tier
+          "*":
+            rps: 2
+            rpm: 5
