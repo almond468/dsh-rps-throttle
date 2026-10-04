@@ -2,6 +2,10 @@
 
 Pre-emptive rate-limit gate for OpenAI-compatible LLM gateways: per-(host, model) pacing with configurable RPS/RPM limits, sliding-window token budgets, and classified 429 handling. Wraps `globalThis.fetch` in the host process via a cordis plugin.
 
+## Origin
+
+This project was built from the author's requirements. **DeepSeek Hermes** autonomously wrote, debugged, and installed the entire plugin. It has been verified to work on both WSL and Windows with DSH v0.2.0-rc.2.
+
 ## Problem Background
 
 16 concurrent requests to the same model → 11 get 429. Adding various retry backoffs still leaks. Empirical testing shows at least **three classes** of 429, each requiring completely different handling:
@@ -165,14 +169,14 @@ node test/selftest.mjs   # Offline, never connects to network; covers pacing/buc
 
 ## Changelog
 
-### 2.0.0
+### 0.0.1
 
 - Added `rpm` per-minute request sliding window and `modelLimits` per-model overrides (empirically glm-5.2 / deepseek-v4-flash only ~5 req/min).
 - 429 classified handling: `rpm`/`tpm` types **no longer inline retry**, instead cool down and hand off to upper layer.
 - Changed to "plan send time and synchronously reserve before sleeping", fixing concurrent budget penetration.
 - Added `heartbeatFile` for load self-verification.
 
-### 1.0.0
+### 0.0.0.1
 
 - Initial release: per-model rate pacing + in-flight limit + optional token sliding window.
 
